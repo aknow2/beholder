@@ -4,6 +4,14 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g., v0.1.0)'
+        required: true
+
+env:
+  RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
 
 jobs:
   build:
@@ -35,8 +43,8 @@ jobs:
           GOOS: ${{ matrix.os }}
           GOARCH: ${{ matrix.arch }}
         run: |
-          VERSION=${{ github.ref_name }}
-          OUTPUT_NAME=beholder-${{ github.ref_name }}-${{ matrix.os }}-${{ matrix.arch }}
+          VERSION=${{ env.RELEASE_TAG }}
+          OUTPUT_NAME=beholder-${{ env.RELEASE_TAG }}-${{ matrix.os }}-${{ matrix.arch }}
           if [ "${{ matrix.os }}" = "windows" ]; then
             OUTPUT_NAME="${OUTPUT_NAME}.exe"
           fi
@@ -45,7 +53,7 @@ jobs:
 
       - name: Smoke test - Validate binary
         run: |
-          OUTPUT_NAME=beholder-${{ github.ref_name }}-${{ matrix.os }}-${{ matrix.arch }}
+          OUTPUT_NAME=beholder-${{ env.RELEASE_TAG }}-${{ matrix.os }}-${{ matrix.arch }}
           if [ "${{ matrix.os }}" = "windows" ]; then
             OUTPUT_NAME="${OUTPUT_NAME}.exe"
           fi
@@ -66,7 +74,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.os }}-${{ matrix.arch }}
-          path: beholder-${{ github.ref_name }}-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.os == 'windows' && '.exe' || '' }}
+          path: beholder-${{ env.RELEASE_TAG }}-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.os == 'windows' && '.exe' || '' }}
           retention-days: 90
 
   release:
@@ -90,16 +98,18 @@ jobs:
       - name: Generate checksums
         run: |
           cd flat-artifacts
-          sha256sum * > ../beholder-${{ github.ref_name }}-checksums.txt
-          cat ../beholder-${{ github.ref_name }}-checksums.txt
+          sha256sum * > ../beholder-${{ env.RELEASE_TAG }}-checksums.txt
+          cat ../beholder-${{ env.RELEASE_TAG }}-checksums.txt
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
           files: |
             flat-artifacts/*
-            beholder-${{ github.ref_name }}-checksums.txt
+            beholder-${{ env.RELEASE_TAG }}-checksums.txt
+          tag_name: ${{ env.RELEASE_TAG }}
+          target_commitish: ${{ github.sha }}
           draft: false
-          prerelease: ${{ contains(github.ref_name, '-') }}
+          prerelease: ${{ contains(env.RELEASE_TAG, '-') }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
