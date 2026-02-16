@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"os/signal"
 	"strconv"
 	"strings"
@@ -89,6 +90,12 @@ func initCmd(args []string) {
 		os.Exit(1)
 	}
 
+	if ok, detail := checkCopilotCLI(); !ok {
+		fmt.Printf("warning: GitHub Copilot CLI not ready (%s)\n", detail)
+		fmt.Println("install: gh extension install github/gh-copilot")
+		fmt.Println("docs: https://github.com/github/copilot-sdk/tree/main/go")
+	}
+
 	reader := bufio.NewReader(os.Stdin)
 	maxWidth, err := promptInt(reader, fmt.Sprintf("image.max_width [%d]: ", defaultCfg.Image.MaxWidth), defaultCfg.Image.MaxWidth, 100, 4096)
 	if err != nil {
@@ -163,6 +170,24 @@ func promptYesNo(reader *bufio.Reader, prompt string, defaultValue bool) (bool, 
 		}
 		fmt.Println("please enter y or n")
 	}
+}
+
+func checkCopilotCLI() (bool, string) {
+	if _, err := exec.LookPath("gh"); err != nil {
+		return false, "gh not found"
+	}
+
+	cmd := exec.Command("gh", "extension", "list")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return false, "failed to list gh extensions"
+	}
+
+	if strings.Contains(string(output), "gh-copilot") {
+		return true, "ok"
+	}
+
+	return false, "gh-copilot extension missing"
 }
 
 func recordCmd(args []string) {
