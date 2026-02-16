@@ -7,11 +7,13 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
 
 	"github.com/aknow2/beholder/internal/app"
+	"github.com/aknow2/beholder/internal/config"
 	"github.com/aknow2/beholder/internal/summary"
 )
 
@@ -30,6 +32,8 @@ func main() {
 	switch cmd {
 	case "record":
 		recordCmd(args)
+	case "init":
+		initCmd(args)
 	case "events":
 		eventsCmd(args)
 	case "summary":
@@ -44,6 +48,120 @@ func main() {
 		fmt.Fprintf(os.Stderr, "unknown command: %s\n", cmd)
 		printUsage()
 		os.Exit(1)
+	}
+}
+
+func initCmd(args []string) {
+	fs := flag.NewFlagSet("init", flag.ExitOnError)
+	configPath := fs.String("config", "~/.beholder/config.yaml", "path to config file")
+	_ = fs.Parse(args)
+
+	resolvedPath, err := config.ResolvePath(*configPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "resolve config path error: %v\n", err)
+		os.Exit(1)
+	}
+
+	if info, err := os.Stat(resolvedPath); err == nil {
+		if info.IsDir() {
+			fmt.Fprintf(os.Stderr, "config path is a directory: %s\n", resolvedPath)
+			os.Exit(1)
+		}
+
+		reader := bufio.NewReader(os.Stdin)
+		ok, err := promptYesNo(reader, fmt.Sprintf("config already exists at %s. Overwrite? [y/N]: ", resolvedPath), false)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "input error: %v\n", err)
+			os.Exit(1)
+		}
+		if !ok {
+			fmt.Println("cancelled")
+			return
+		}
+	} else if !os.IsNotExist(err) {
+		fmt.Fprintf(os.Stderr, "config stat error: %v\n", err)
+		os.Exit(1)
+	}
+
+	defaultCfg, err := config.Default()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "load default config error: %v\n", err)
+		os.Exit(1)
+	}
+
+	reader := bufio.NewReader(os.Stdin)
+	maxWidth, err := promptInt(reader, fmt.Sprintf("image.max_width [%d]: ", defaultCfg.Image.MaxWidth), defaultCfg.Image.MaxWidth, 100, 4096)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "input error: %v\n", err)
+		os.Exit(1)
+	}
+
+	saveImages, err := promptYesNo(reader, fmt.Sprintf("image.save_images [%t] (y/n): ", defaultCfg.Image.SaveImages), defaultCfg.Image.SaveImages)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "input error: %v\n", err)
+		os.Exit(1)
+	}
+
+	defaultCfg.Image.MaxWidth = maxWidth
+	defaultCfg.Image.SaveImages = saveImages
+
+	if err := config.Validate(defaultCfg); err != nil {
+		fmt.Fprintf(os.Stderr, "config validation error: %v\n", err)
+		os.Exit(1)
+	}
+
+	if err := config.Write(*configPath, defaultCfg); err != nil {
+		fmt.Fprintf(os.Stderr, "write config error: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("config written to %s\n", resolvedPath)
+}
+
+func promptInt(reader *bufio.Reader, prompt string, defaultValue, minValue, maxValue int) (int, error) {
+	for {
+		fmt.Print(prompt)
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			return 0, err
+		}
+		line = strings.TrimSpace(line)
+		if line == "" {
+			return defaultValue, nil
+		}
+
+		value, err := strconv.Atoi(line)
+		if err != nil {
+			fmt.Println("invalid number, try again")
+			continue
+		}
+		if value < minValue || value > maxValue {
+			fmt.Printf("value must be between %d and %d\n", minValue, maxValue)
+			continue
+		}
+
+		return value, nil
+	}
+}
+
+func promptYesNo(reader *bufio.Reader, prompt string, defaultValue bool) (bool, error) {
+	for {
+		fmt.Print(prompt)
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			return false, err
+		}
+		line = strings.TrimSpace(strings.ToLower(line))
+		if line == "" {
+			return defaultValue, nil
+		}
+		if line == "y" || line == "yes" {
+			return true, nil
+		}
+		if line == "n" || line == "no" {
+			return false, nil
+		}
+		fmt.Println("please enter y or n")
 	}
 }
 
@@ -216,6 +334,7 @@ func versionCmd() {
 func printUsage() {
 	fmt.Println("Usage: beholder <command> [options]")
 	fmt.Println("Commands:")
+	fmt.Println("  init     create config interactively")
 	fmt.Println("  record   start scheduled recording (use --oneshot for single capture)")
 	fmt.Println("  events   list events for a date")
 	fmt.Println("  summary  generate daily summary report")
