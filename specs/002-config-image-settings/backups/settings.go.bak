@@ -1,0 +1,56 @@
+package storage
+
+import (
+	"encoding/json"
+	"time"
+)
+
+type Settings struct {
+	ID                     string
+	CaptureIntervalMinutes int
+	SaveImages             bool
+	MaskRegions            []MaskRegion
+	CreatedAt              time.Time
+	UpdatedAt              time.Time
+}
+
+type MaskRegion struct {
+	X int `json:"x"`
+	Y int `json:"y"`
+	W int `json:"w"`
+	H int `json:"h"`
+}
+
+func (s *Store) UpsertSettings(settings Settings) error {
+	maskJSON, _ := json.Marshal(settings.MaskRegions)
+	_, err := s.DB.Exec(`INSERT INTO settings (id, capture_interval_minutes, save_images, mask_regions, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET
+		capture_interval_minutes=excluded.capture_interval_minutes,
+		save_images=excluded.save_images,
+		mask_regions=excluded.mask_regions,
+		updated_at=excluded.updated_at`,
+		settings.ID,
+		settings.CaptureIntervalMinutes,
+		settings.SaveImages,
+		string(maskJSON),
+		settings.CreatedAt.UTC().Format(time.RFC3339),
+		settings.UpdatedAt.UTC().Format(time.RFC3339),
+	)
+	return err
+}
+
+func (s *Store) GetSettings(id string) (*Settings, error) {
+	row := s.DB.QueryRow(`SELECT id, capture_interval_minutes, save_images, mask_regions, created_at, updated_at FROM settings WHERE id = ?`, id)
+	var st Settings
+	var maskJSON string
+	var createdAt string
+	var updatedAt string
+	if err := row.Scan(&st.ID, &st.CaptureIntervalMinutes, &st.SaveImages, &maskJSON, &createdAt, &updatedAt); err != nil {
+		return nil, err
+	}
+	_ = json.Unmarshal([]byte(maskJSON), &st.MaskRegions)
+	st.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)
+	st.UpdatedAt, _ = time.Parse(time.RFC3339, updatedAt)
+	return &st, nil
+}

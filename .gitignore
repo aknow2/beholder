@@ -1,0 +1,34 @@
+# Database
+data/
+
+# Go build artifacts
+bin/
+dist/
+*.exe
+*.test
+*.out
+
+# Dependencies
+vendor/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# User data directory (images and DB now in ~/.beholder/)
+# Keep this for any legacy local data/ references

@@ -1,0 +1,296 @@
+openapi: 3.0.3
+info:
+  title: GitHub Releases API (Subset for Beholder Installer)
+  description: |
+    Informal OpenAPI specification documenting the subset of GitHub's Releases API
+    used by the Beholder installation scripts. This is NOT an official GitHub API spec,
+    but rather a contract definition for the installer's consumption.
+    
+    Official GitHub API docs: https://docs.github.com/en/rest/releases/releases
+  version: 1.0.0
+servers:
+  - url: https://api.github.com
+    description: GitHub REST API v3
+  - url: https://github.com
+    description: GitHub direct download URLs
+
+paths:
+  /repos/{owner}/{repo}/releases/latest:
+    get:
+      summary: Get the latest release
+      description: |
+        Fetches metadata for the latest published release. Installation scripts use this
+        to determine the most recent stable version and available binary artifacts.
+      parameters:
+        - name: owner
+          in: path
+          required: true
+          schema:
+            type: string
+          example: aknow2
+        - name: repo
+          in: path
+          required: true
+          schema:
+            type: string
+          example: beholder
+      responses:
+        '200':
+          description: Successfully retrieved latest release metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Release'
+              example:
+                tag_name: v0.1.0
+                name: "Beholder v0.1.0"
+                published_at: "2026-02-02T10:30:00Z"
+                assets:
+                  - name: beholder-darwin-amd64
+                    size: 8388608
+                    browser_download_url: "https://github.com/aknow2/beholder/releases/download/v0.1.0/beholder-darwin-amd64"
+                  - name: beholder-darwin-arm64
+                    size: 8388608
+                    browser_download_url: "https://github.com/aknow2/beholder/releases/download/v0.1.0/beholder-darwin-arm64"
+                  - name: beholder-windows-amd64.exe
+                    size: 8388608
+                    browser_download_url: "https://github.com/aknow2/beholder/releases/download/v0.1.0/beholder-windows-amd64.exe"
+        '404':
+          description: No releases found for repository
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                message: "Not Found"
+                documentation_url: "https://docs.github.com/rest/releases/releases#get-the-latest-release"
+
+  /repos/{owner}/{repo}/releases/tags/{tag}:
+    get:
+      summary: Get a release by tag name
+      description: |
+        Fetches metadata for a specific release identified by its git tag.
+        Used by installer scripts when user requests a specific version.
+      parameters:
+        - name: owner
+          in: path
+          required: true
+          schema:
+            type: string
+          example: aknow2
+        - name: repo
+          in: path
+          required: true
+          schema:
+            type: string
+          example: beholder
+        - name: tag
+          in: path
+          required: true
+          schema:
+            type: string
+          example: v0.1.0
+      responses:
+        '200':
+          description: Successfully retrieved release metadata for tag
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Release'
+        '404':
+          description: Release with specified tag not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /{owner}/{repo}/releases/download/{tag}/{asset_name}:
+    get:
+      summary: Download a release asset (binary)
+      description: |
+        Direct HTTPS download endpoint for release assets. Installation scripts
+        use this to download the platform-specific binary. No authentication required
+        for public repositories.
+      servers:
+        - url: https://github.com
+      parameters:
+        - name: owner
+          in: path
+          required: true
+          schema:
+            type: string
+          example: aknow2
+        - name: repo
+          in: path
+          required: true
+          schema:
+            type: string
+          example: beholder
+        - name: tag
+          in: path
+          required: true
+          schema:
+            type: string
+          example: v0.1.0
+        - name: asset_name
+          in: path
+          required: true
+          schema:
+            type: string
+          example: beholder-darwin-amd64
+      responses:
+        '200':
+          description: Binary file download
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: Asset not found for specified release
+        '302':
+          description: Redirect to CDN download URL (follow redirect)
+
+components:
+  schemas:
+    Release:
+      type: object
+      required:
+        - tag_name
+        - assets
+      properties:
+        tag_name:
+          type: string
+          description: Git tag name (typically semantic version like v1.2.3)
+          example: v0.1.0
+        name:
+          type: string
+          description: Human-readable release name
+          example: "Beholder v0.1.0 - Initial Release"
+        published_at:
+          type: string
+          format: date-time
+          description: ISO 8601 timestamp of release publication
+          example: "2026-02-02T10:30:00Z"
+        html_url:
+          type: string
+          format: uri
+          description: Browser-accessible URL for release notes
+          example: "https://github.com/aknow2/beholder/releases/tag/v0.1.0"
+        assets:
+          type: array
+          description: Array of downloadable files attached to this release
+          items:
+            $ref: '#/components/schemas/Asset'
+
+    Asset:
+      type: object
+      required:
+        - name
+        - size
+        - browser_download_url
+      properties:
+        name:
+          type: string
+          description: Filename of the asset
+          example: beholder-darwin-amd64
+        size:
+          type: integer
+          description: File size in bytes
+          example: 8388608
+        browser_download_url:
+          type: string
+          format: uri
+          description: HTTPS URL for downloading the asset
+          example: "https://github.com/aknow2/beholder/releases/download/v0.1.0/beholder-darwin-amd64"
+        content_type:
+          type: string
+          description: MIME type of the asset
+          example: application/octet-stream
+
+    Error:
+      type: object
+      properties:
+        message:
+          type: string
+          description: Human-readable error message
+          example: "Not Found"
+        documentation_url:
+          type: string
+          format: uri
+          description: Link to relevant API documentation
+          example: "https://docs.github.com/rest"
+
+  securitySchemes: {}
+  # No authentication required for public repository releases
+
+# Installation Script Usage Patterns
+x-usage-patterns:
+  detect-platform:
+    description: Shell script pattern to detect platform and architecture
+    bash: |
+      PLATFORM=$(uname -s | tr '[:upper:]' '[:lower:]')
+      ARCH=$(uname -m)
+      if [ "$ARCH" = "x86_64" ]; then ARCH="amd64"; fi
+      if [ "$ARCH" = "aarch64" ]; then ARCH="arm64"; fi
+      if [ "$PLATFORM" = "darwin" ]; then PLATFORM="darwin"; fi
+      ASSET_NAME="beholder-${PLATFORM}-${ARCH}"
+      if [ "$PLATFORM" = "windows" ]; then ASSET_NAME="${ASSET_NAME}.exe"; fi
+    powershell: |
+      $Platform = "windows"
+      $Arch = "amd64"
+      $AssetName = "beholder-$Platform-$Arch.exe"
+
+  fetch-latest-version:
+    description: Query GitHub API for latest release version
+    bash: |
+      VERSION=$(curl -fsSL https://api.github.com/repos/aknow2/beholder/releases/latest \
+        | grep '"tag_name"' \
+        | cut -d'"' -f4)
+    powershell: |
+      $LatestRelease = Invoke-RestMethod -Uri "https://api.github.com/repos/aknow2/beholder/releases/latest"
+      $Version = $LatestRelease.tag_name
+
+  download-binary:
+    description: Download platform-specific binary from release assets
+    bash: |
+      URL="https://github.com/aknow2/beholder/releases/download/${VERSION}/${ASSET_NAME}"
+      curl -fsSL "$URL" -o /tmp/beholder
+      chmod +x /tmp/beholder
+    powershell: |
+      $Url = "https://github.com/aknow2/beholder/releases/download/$Version/$AssetName"
+      Invoke-WebRequest -Uri $Url -OutFile "$env:TEMP\beholder.exe"
+
+  error-handling:
+    description: Handle download failures with fallback
+    bash: |
+      if ! curl -fsSL "$URL" -o /tmp/beholder; then
+        echo "Error: Failed to download binary from $URL"
+        echo "Fallback: Download manually from https://github.com/aknow2/beholder/releases"
+        exit 1
+      fi
+
+# Retry Strategy
+x-retry-strategy:
+  max-retries: 3
+  backoff: exponential
+  initial-delay: 1s
+  max-delay: 10s
+  retryable-status-codes: [429, 500, 502, 503, 504]
+  example-implementation: |
+    # Bash retry with exponential backoff
+    MAX_RETRIES=3
+    DELAY=1
+    for i in $(seq 1 $MAX_RETRIES); do
+      if curl -fsSL "$URL" -o /tmp/beholder; then
+        break
+      fi
+      if [ $i -lt $MAX_RETRIES ]; then
+        echo "Retry $i/$MAX_RETRIES after ${DELAY}s..."
+        sleep $DELAY
+        DELAY=$((DELAY * 2))
+      else
+        echo "Failed after $MAX_RETRIES attempts"
+        exit 1
+      fi
+    done

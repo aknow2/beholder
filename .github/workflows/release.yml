@@ -1,0 +1,105 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    name: Build ${{ matrix.os }}-${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        include:
+          - os: darwin
+            arch: amd64
+            runner: macos-latest
+          - os: darwin
+            arch: arm64
+            runner: macos-latest
+          - os: windows
+            arch: amd64
+            runner: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: Build binary
+        env:
+          GOOS: ${{ matrix.os }}
+          GOARCH: ${{ matrix.arch }}
+        run: |
+          VERSION=${{ github.ref_name }}
+          OUTPUT_NAME=beholder-${{ github.ref_name }}-${{ matrix.os }}-${{ matrix.arch }}
+          if [ "${{ matrix.os }}" = "windows" ]; then
+            OUTPUT_NAME="${OUTPUT_NAME}.exe"
+          fi
+          go build -ldflags "-X main.Version=${VERSION}" -o "${OUTPUT_NAME}" ./cmd/beholder
+        shell: bash
+
+      - name: Smoke test - Validate binary
+        run: |
+          OUTPUT_NAME=beholder-${{ github.ref_name }}-${{ matrix.os }}-${{ matrix.arch }}
+          if [ "${{ matrix.os }}" = "windows" ]; then
+            OUTPUT_NAME="${OUTPUT_NAME}.exe"
+          fi
+          if [ ! -f "${OUTPUT_NAME}" ]; then
+            echo "ERROR: Binary file not found: ${OUTPUT_NAME}"
+            exit 1
+          fi
+          echo "Binary size: $(stat -f%z "${OUTPUT_NAME}" 2>/dev/null || stat -c%s "${OUTPUT_NAME}" 2>/dev/null)"
+          if [ "${{ matrix.os }}" != "windows" ]; then
+            chmod +x "${OUTPUT_NAME}"
+            ./"${OUTPUT_NAME}" --version
+          else
+            ./"${OUTPUT_NAME}" --version
+          fi
+        shell: bash
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.os }}-${{ matrix.arch }}
+          path: beholder-${{ github.ref_name }}-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.os == 'windows' && '.exe' || '' }}
+          retention-days: 90
+
+  release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+
+      - name: Flatten artifacts
+        run: |
+          mkdir -p flat-artifacts
+          find release-artifacts -type f -exec mv {} flat-artifacts/ \;
+
+      - name: Generate checksums
+        run: |
+          cd flat-artifacts
+          sha256sum * > ../beholder-${{ github.ref_name }}-checksums.txt
+          cat ../beholder-${{ github.ref_name }}-checksums.txt
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            flat-artifacts/*
+            beholder-${{ github.ref_name }}-checksums.txt
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

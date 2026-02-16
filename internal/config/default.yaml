@@ -1,0 +1,48 @@
+storage:
+  path: ~/.beholder/beholder.db
+
+scheduler:
+  interval_minutes: 10
+
+copilot:
+  model: gpt-4.1
+
+image:
+  max_width: 1280
+  max_files: 0
+  save_images: true
+  format: jpeg
+
+categories:
+  - id: implement
+    name: 実装
+    description: 実装作業
+    examples:
+      - コーディング
+      - リファクタ
+  - id: research
+    name: 調査
+    description: 調べ物や検証
+    examples:
+      - 仕様確認
+      - 技術調査
+  - id: meeting
+    name: 会議
+    description: 打ち合わせ
+    examples:
+      - ミーティング
+      - 通話
+  - id: slacking
+    name: 雑談・ダラダラ
+    description: 雑談や休憩
+    examples:
+      - 動画鑑賞
+      - ゲーム
+      - 音楽鑑賞
+      - SNS閲覧
+  - id: afk
+    name: 離席
+    description: 離席中
+    examples:
+      - 休憩
+      - 外出

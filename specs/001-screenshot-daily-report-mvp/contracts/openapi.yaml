@@ -1,0 +1,279 @@
+openapi: 3.0.3
+info:
+  title: Screenshot Daily Report API
+  version: 0.1.0
+servers:
+  - url: http://localhost:8080
+paths:
+  /categories:
+    get:
+      summary: List categories
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Category"
+    post:
+      summary: Create category
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CategoryCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Category"
+  /categories/{id}:
+    get:
+      summary: Get category
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Category"
+    put:
+      summary: Update category
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CategoryUpdate"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Category"
+    delete:
+      summary: Delete category
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: No Content
+  /events:
+    get:
+      summary: List events by date
+      parameters:
+        - name: date
+          in: query
+          required: true
+          schema:
+            type: string
+            example: 2026-01-24
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Event"
+    post:
+      summary: Create event (manual trigger)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EventCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Event"
+  /events/{id}/reclassify:
+    post:
+      summary: Reclassify a failed event
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "202":
+          description: Accepted
+  /summaries:
+    get:
+      summary: Generate summary for a date
+      parameters:
+        - name: date
+          in: query
+          required: true
+          schema:
+            type: string
+            example: 2026-01-24
+        - name: format
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [markdown, json, text]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Summary"
+  /settings:
+    get:
+      summary: Get settings
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Settings"
+    put:
+      summary: Update settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SettingsUpdate"
+      responses:
+        "200":
+          description: OK
+components:
+  schemas:
+    Category:
+      type: object
+      required: [id, name, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        description: { type: string }
+        examples:
+          type: array
+          items: { type: string }
+        color: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    CategoryCreate:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        description: { type: string }
+        examples:
+          type: array
+          items: { type: string }
+        color: { type: string }
+    CategoryUpdate:
+      type: object
+      properties:
+        name: { type: string }
+        description: { type: string }
+        examples:
+          type: array
+          items: { type: string }
+        color: { type: string }
+    Event:
+      type: object
+      required: [id, capturedAt, status]
+      properties:
+        id: { type: string }
+        capturedAt: { type: string, format: date-time }
+        categoryId: { type: string }
+        confidence: { type: number, minimum: 0, maximum: 1 }
+        status: { type: string, enum: [PENDING, FAILED, OK] }
+        agentVersion: { type: string }
+        screenshotHash: { type: string }
+        detectedApps:
+          type: array
+          items: { type: string }
+        detectedKeywords:
+          type: array
+          items: { type: string }
+        notes: { type: string }
+        createdAt: { type: string, format: date-time }
+    EventCreate:
+      type: object
+      required: [capturedAt]
+      properties:
+        capturedAt: { type: string, format: date-time }
+        imageBase64: { type: string }
+        displayCount: { type: integer }
+        resolution: { type: string }
+    Summary:
+      type: object
+      required: [date, totalsByCategory, timeline]
+      properties:
+        date: { type: string }
+        totalsByCategory:
+          type: object
+          additionalProperties: { type: integer }
+        timeline:
+          type: array
+          items:
+            type: object
+            properties:
+              start: { type: string, format: date-time }
+              end: { type: string, format: date-time }
+              categoryId: { type: string }
+        format: { type: string }
+    Settings:
+      type: object
+      required: [captureIntervalMinutes, saveImages]
+      properties:
+        captureIntervalMinutes: { type: integer }
+        saveImages: { type: boolean }
+        maskRegions:
+          type: array
+          items:
+            type: object
+            properties:
+              x: { type: integer }
+              y: { type: integer }
+              w: { type: integer }
+              h: { type: integer }
+    SettingsUpdate:
+      type: object
+      properties:
+        captureIntervalMinutes: { type: integer }
+        saveImages: { type: boolean }
+        maskRegions:
+          type: array
+          items:
+            type: object
+            properties:
+              x: { type: integer }
+              y: { type: integer }
+              w: { type: integer }
+              h: { type: integer }

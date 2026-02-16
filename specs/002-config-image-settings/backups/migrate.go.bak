@@ -1,0 +1,58 @@
+package storage
+
+import "database/sql"
+
+func (s *Store) Migrate() error {
+	queries := []string{
+		`CREATE TABLE IF NOT EXISTS categories (
+			id TEXT PRIMARY KEY,
+			name TEXT NOT NULL,
+			description TEXT,
+			examples TEXT,
+			color TEXT,
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL
+		);`,
+		`CREATE TABLE IF NOT EXISTS settings (
+			id TEXT PRIMARY KEY,
+			capture_interval_minutes INTEGER NOT NULL,
+			save_images INTEGER NOT NULL,
+			mask_regions TEXT,
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL
+		);`,
+		`CREATE TABLE IF NOT EXISTS events (
+			id TEXT PRIMARY KEY,
+			captured_at TEXT NOT NULL,
+			category_id TEXT,
+			confidence REAL,
+			status TEXT NOT NULL,
+			agent_version TEXT,
+			screenshot_hash TEXT,
+			detected_apps TEXT,
+			detected_keywords TEXT,
+			notes TEXT,
+			created_at TEXT NOT NULL,
+			FOREIGN KEY(category_id) REFERENCES categories(id)
+		);`,
+	}
+
+	for _, q := range queries {
+		if _, err := s.DB.Exec(q); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func withTx(db *sql.DB, fn func(*sql.Tx) error) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	if err := fn(tx); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	return tx.Commit()
+}
